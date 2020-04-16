@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import static hex.gam.GAMModel.cleanUpInputFrame;
 import static hex.gam.MatrixFrameUtils.GamUtils.AllocateType.*;
 import static hex.gam.MatrixFrameUtils.GamUtils.*;
 import static hex.glm.GLMModel.GLMParameters.Family.multinomial;
@@ -287,7 +288,6 @@ public class GAM extends ModelBuilder<GAMModel, GAMModel.GAMParameters, GAMModel
         final int numKnotsM1 = numKnots - 1;
         final int splineType = _parms._bs[index];
         final int frameIndex = index;
- //       final boolean nullKnots = _knots[frameIndex]==null;
         final String[] newColNames = new String[numKnots];
         for (int colIndex = 0; colIndex < numKnots; colIndex++) {
           newColNames[colIndex] = _parms._gam_columns[index] + "_" + splineType + "_" + colIndex;
@@ -348,6 +348,11 @@ public class GAM extends ModelBuilder<GAMModel, GAMModel.GAMParameters, GAMModel
       if (error_count() > 0)   // if something goes wrong during gam transformation, let's throw a fit again!
         throw H2OModelBuilderIllegalArgumentException.makeFromBuilder(GAM.this);
       
+      if (valid() != null) {  // transform the validation frame if present
+        _valid = rebalance(cleanUpInputFrame(_parms.valid().clone(), _parms, _gamColNamesCenter, _binvD, _zTranspose, _knots,
+                _numKnots), false, _result+".temporary.valid");
+      }
+      
       DKV.put(newTFrame); // This one will cause deleted vectors if add to Scope.track
       _job.update(0, "Initializing model training");
       buildModel(newTFrame); // build gam model 
@@ -358,6 +363,7 @@ public class GAM extends ModelBuilder<GAMModel, GAMModel.GAMParameters, GAMModel
       DataInfo dinfo = null;
       try {
         _job.update(0, "Adding GAM columns to training dataset...");
+        // replaced _valid with null
         dinfo = new DataInfo(_train.clone(), _valid, 1, _parms._use_all_factor_levels 
                 || _parms._lambda_search, _parms._standardize ? DataInfo.TransformType.STANDARDIZE : DataInfo.TransformType.NONE, DataInfo.TransformType.NONE,
                 _parms.missingValuesHandling() == GLMParameters.MissingValuesHandling.Skip,
@@ -380,8 +386,9 @@ public class GAM extends ModelBuilder<GAMModel, GAMModel.GAMParameters, GAMModel
         // build GAM Model Metrics
         _job.update(0, "Scoring training frame");
         scoreGenModelMetrics(model, train(), true); // score training dataset and generate model metrics
-        if (valid() != null)
+        if (valid() != null) {
           scoreGenModelMetrics(model, valid(), false); // score validation dataset and generate model metrics
+        }
       } finally {
         List<Key<Vec>> keep = new ArrayList<>();
         if (model != null) {
@@ -422,7 +429,7 @@ public class GAM extends ModelBuilder<GAMModel, GAMModel.GAMParameters, GAMModel
     }
 
     GLMModel buildGLMModel(GAMParameters parms, Frame trainData) {
-      GLMParameters glmParam = GamUtils.copyGAMParams2GLMParams(parms, trainData);  // copy parameter from GAM to GLM
+      GLMParameters glmParam = GamUtils.copyGAMParams2GLMParams(parms, trainData, valid());  // copy parameter from GAM to GLM
       int numGamCols = _parms._gam_columns.length;
       for (int find = 0; find < numGamCols; find++) {
         if ((_parms._scale != null) && (_parms._scale[find] != 1.0))
