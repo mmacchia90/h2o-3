@@ -2,7 +2,10 @@
 
 pwd
 export H2O_BASE=$(pwd)
-cd $H2O_BASE/h2o-k8s/tests/clustering/
+mkdir /home/h2o
+ln -s $H2O_BASE /home/h2o/
+export H2O_BASE=/home/h2o
+cd $H2O_BASE/h2o-3/h2o-k8s/tests/clustering/
 k3d --version
 k3d delete
 k3d create -v $H2O_BASE/build/h2o.jar:$H2O_BASE/build/h2o.jar --registries-file registries.yaml --publish 8080:80 --api-port localhost:6444 --server-arg --tls-san="127.0.0.1" --wait 120 
